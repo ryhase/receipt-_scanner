@@ -300,10 +300,9 @@ function callGeminiWithFallback_(payload, apiKey) {
 
   const modelCandidates = [
     configuredModel,
-    'gemini-2.5-flash',
-    'gemini-1.5-flash',
     'gemini-3.5-flash-lite',
-    'gemini-2.0-flash'
+    'gemini-3.6-flash',
+    'gemini-3.5-flash'
   ].filter(function(item, pos, self) {
     return item && self.indexOf(item) === pos;
   });
