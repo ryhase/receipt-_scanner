@@ -1,5 +1,8 @@
-.next/
-node_modules/
+# Apps Script の設定値・認証情報はリポジトリに保存しない。
+.clasp.json
+.claspignore
 .env*
-!.env.example
-*.tsbuildinfo
+node_modules/
+.DS_Store
+.idea/
+.vscode/
