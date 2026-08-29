@@ -300,10 +300,9 @@ function callGeminiWithFallback_(payload, apiKey) {
 
   const modelCandidates = [
     configuredModel,
-    'gemini-2.5-flash',
-    'gemini-1.5-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
     'gemini-3.5-flash-lite',
-    'gemini-2.0-flash'
   ].filter(function(item, pos, self) {
     return item && self.indexOf(item) === pos;
   });
@@ -747,7 +746,7 @@ function testConnection() {
   // Gemini テスト
   if (geminiKey) {
     try {
-      const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
       const res = UrlFetchApp.fetch(url, {
         method: 'post',
         contentType: 'application/json',
