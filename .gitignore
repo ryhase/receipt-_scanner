@@ -1,0 +1,8 @@
+# Apps Script の設定値・認証情報はリポジトリに保存しない。
+.clasp.json
+.claspignore
+.env*
+node_modules/
+.DS_Store
+.idea/
+.vscode/
