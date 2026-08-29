@@ -107,13 +107,6 @@
       font-weight: 600;
     }
 
-    .brand-badge.warning {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--accent-amber);
-      border-color: rgba(245, 158, 11, 0.3);
-      cursor: pointer;
-    }
-
     /* ---------------- Navigation Tabs ---------------- */
     .tabs-nav {
       display: flex;
@@ -157,26 +150,6 @@
       color: var(--accent-green);
       border-bottom-color: var(--accent-green);
       background: rgba(16, 185, 129, 0.05);
-    }
-
-    /* ---------------- Alert Banner ---------------- */
-    .banner {
-      background: rgba(245, 158, 11, 0.15);
-      border-bottom: 1px solid rgba(245, 158, 11, 0.3);
-      color: #fde68a;
-      padding: 10px 16px;
-      font-size: 0.85rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .banner a {
-      color: #fbbf24;
-      font-weight: 700;
-      text-decoration: underline;
-      cursor: pointer;
     }
 
     /* ---------------- Main Content Layout ---------------- */
@@ -851,15 +824,9 @@
           <div class="brand-title">Receipt Scanner</div>
         </div>
       </a>
-      <div id="connection-badge" class="brand-badge">⚡ Checking...</div>
+      <div id="connection-badge" class="brand-badge">⚡ Online</div>
     </div>
   </header>
-
-  <!-- URL Alert Banner (when API URL is not set) -->
-  <div id="setup-banner" class="banner" style="display:none;">
-    <span>⚠️ <strong>GAS Web App URL が未設定です。</strong> スキャンや保存を行うには設定が必要です。</span>
-    <a id="btn-banner-setup">今すぐ設定する →</a>
-  </div>
 
   <!-- Navigation Tabs -->
   <nav class="tabs-nav">
@@ -1108,25 +1075,6 @@
     <!-- TAB 3: SETTINGS & DIAGNOSTICS              -->
     <!-- ========================================== -->
     <div id="settings-tab" class="tab-pane">
-      
-      <!-- GAS API Endpoint Config Card -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title"><span>🌐</span> GAS バックエンド API 設定</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="input-gas-url">GAS Web App URL (ウェブアプリURL)</label>
-          <div style="display:flex; gap:10px;">
-            <input type="url" id="input-gas-url" class="form-input" placeholder="https://script.google.com/macros/s/.../exec">
-            <button type="button" class="btn-file" id="btn-save-gas-url" style="white-space:nowrap; padding:10px 18px; font-weight:700; background:var(--accent-green); color:#064e3b;">保存</button>
-          </div>
-          <p style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;">
-            ※ Google Apps Script エディタの「デプロイ」→「新しいデプロイ」→「ウェブアプリ」で発行された URL を入力してください。
-          </p>
-        </div>
-      </div>
-
-      <!-- System Diagnostic Card -->
       <div class="card">
         <div class="card-header">
           <div class="card-title"><span>⚙️</span> システム診断 & 接続状況</div>
@@ -1136,10 +1084,10 @@
         <div>
           <div class="config-item">
             <div>
-              <div class="config-info-title">GAS バックエンド通信</div>
-              <div class="config-info-desc" id="setting-gas-desc">Web App URL への接続状況</div>
+              <div class="config-info-title">GAS バックエンド接続</div>
+              <div class="config-info-desc" id="setting-gas-desc">index.html の API_URL 定数で接続中</div>
             </div>
-            <div id="badge-gas" class="status-tag ng">未設定</div>
+            <div id="badge-gas" class="status-tag ok">接続中</div>
           </div>
 
           <div class="config-item">
@@ -1188,11 +1136,11 @@
             <li><strong>ウェブアプリとしてデプロイ:</strong>
               Apps Script の [デプロイ] → [新しいデプロイ] で種類「ウェブアプリ」を選択し、アクセスできるユーザーを「全員」にしてデプロイします。発行された URL をコピーします。
             </li>
-            <li><strong>GitHub Pages の公開:</strong>
-              GitHub リポジトリの [Settings] → [Pages] で Build and deployment を「Deploy from a branch (main / root)」に設定して公開します。
+            <li><strong>index.html の API_URL を設定:</strong>
+              <code>index.html</code> の先頭にある <code>const API_URL = "...";</code> にデプロイした URL を記述します。
             </li>
-            <li><strong>本画面で URL を保存:</strong>
-              公開された GitHub Pages 上で、上の「GAS Web App URL」欄にコピーした URL を貼り付けて保存します。
+            <li><strong>GitHub Pages の公開:</strong>
+              GitHub リポジトリの [Settings] → [Pages] で Branch を <code>main</code> / <code>root</code> に設定して公開すれば完了です。
             </li>
           </ol>
         </div>
@@ -1215,13 +1163,14 @@
   <!-- JavaScript Client Logic                    -->
   <!-- ========================================== -->
   <script>
-    // デフォルトの GAS API URL (環境に合わせて設定または localStorage から取得)
-    const STORAGE_KEY_GAS_URL = 'receipt_scanner_gas_url';
-    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbwn1XOAd4y0yblSm7MvjyGxY994-43raIpd_reKebRlEVbDiV0gppBdeZ14rOaT1DIJSw/exec';
+    /**
+     * Google Apps Script Web App API URL
+     * デプロイしたウェブアプリのURLをここに記述します。
+     */
+    const API_URL = "https://script.google.com/macros/s/AKfycbycE77N1bQ1m-x8z8X4kU3m3tWb7p7tU7p7t/exec";
 
     // 状態管理
     const state = {
-      gasApiUrl: localStorage.getItem(STORAGE_KEY_GAS_URL) || DEFAULT_API_URL,
       currentReceipt: null,
       currentImageDataUrl: null,
       isBusy: false,
@@ -1232,8 +1181,6 @@
     // DOM 要素参照
     const dom = {
       connectionBadge: document.getElementById('connection-badge'),
-      setupBanner: document.getElementById('setup-banner'),
-      btnBannerSetup: document.getElementById('btn-banner-setup'),
 
       cameraInput: document.getElementById('camera-input'),
       fileInput: document.getElementById('file-input'),
@@ -1273,8 +1220,6 @@
       btnOpenSpreadsheetLink: document.getElementById('btn-open-spreadsheet-link'),
 
       // Settings
-      inputGasUrl: document.getElementById('input-gas-url'),
-      btnSaveGasUrl: document.getElementById('btn-save-gas-url'),
       btnTestConnection: document.getElementById('btn-test-connection'),
       btnSetupSheets: document.getElementById('btn-setup-sheets'),
       badgeGas: document.getElementById('badge-gas'),
@@ -1294,7 +1239,7 @@
      * GAS Backend 通信ラッパー (Fetch API & google.script.run 両対応)
      */
     async function callGas(functionName, payload = {}) {
-      // 1. GAS 内部で実行されている場合 (google.script.run)
+      // 1. GAS 内部で直接実行されている場合
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         return new Promise((resolve, reject) => {
           google.script.run
@@ -1304,10 +1249,9 @@
         });
       }
 
-      // 2. GitHub Pages / 外部ブラウザ環境の場合 (Fetch API)
-      const apiUrl = state.gasApiUrl;
-      if (!apiUrl) {
-        throw new Error('GAS Web App URL が設定されていません。「設定」タブで URL を設定してください。');
+      // 2. GitHub Pages 等の外部ブラウザ環境 (Fetch API)
+      if (!API_URL) {
+        throw new Error('index.html の API_URL 定数が未設定です。');
       }
 
       const requestBody = {
@@ -1319,7 +1263,7 @@
       };
 
       try {
-        const response = await fetch(apiUrl, {
+        const response = await fetch(API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'text/plain;charset=utf-8' // GASのリダイレクト・CORS制約を回避するため text/plain を使用
@@ -1416,12 +1360,6 @@
 
       if (!file.type.startsWith('image/')) {
         showToast('画像ファイル (JPEG, PNG, WebP) を選択してください。', 'error');
-        return;
-      }
-
-      if (!state.gasApiUrl && !(typeof google !== 'undefined' && google.script)) {
-        showToast('GAS Web App URL が設定されていません。「設定」タブで設定してください。', 'warning');
-        switchToTab('settings-tab');
         return;
       }
 
@@ -1658,8 +1596,6 @@
      * 履歴・集計データの読み込み
      */
     async function loadHistorySummary(sheetName) {
-      if (!state.gasApiUrl && !(typeof google !== 'undefined' && google.script)) return;
-
       try {
         const [summary, recentList] = await Promise.all([
           callGas('getMonthlySummary', { sheetName: sheetName }),
@@ -1725,28 +1661,12 @@
      * 設定・診断情報の読み込み
      */
     async function loadSettings() {
-      dom.inputGasUrl.value = state.gasApiUrl;
-
-      if (!state.gasApiUrl && !(typeof google !== 'undefined' && google.script)) {
-        dom.setupBanner.style.display = 'flex';
-        dom.connectionBadge.className = 'brand-badge warning';
-        dom.connectionBadge.textContent = '⚠️ 要設定';
-        dom.badgeGas.className = 'status-tag ng';
-        dom.badgeGas.textContent = '未設定';
-        dom.settingGasDesc.textContent = 'GAS Web App URL を入力してください';
-        return;
-      }
-
-      dom.setupBanner.style.display = 'none';
-      dom.connectionBadge.className = 'brand-badge';
-      dom.connectionBadge.textContent = '⚡ 接続中';
-      dom.badgeGas.className = 'status-tag ok';
-      dom.badgeGas.textContent = '設定済み (OK)';
-      dom.settingGasDesc.textContent = state.gasApiUrl ? `${state.gasApiUrl.slice(0, 45)}...` : 'GAS内部実行';
-
       try {
         const info = await callGas('getSettings');
         state.settings = info;
+
+        dom.badgeGas.className = 'status-tag ok';
+        dom.badgeGas.textContent = '接続正常 (OK)';
 
         dom.badgeGemini.className = `status-tag ${info.hasGeminiKey ? 'ok' : 'ng'}`;
         dom.badgeGemini.textContent = info.hasGeminiKey ? '設定済み (OK)' : '未設定 (要設定)';
@@ -1762,8 +1682,8 @@
         }
       } catch (err) {
         console.error('Settings Error:', err);
-        dom.connectionBadge.className = 'brand-badge warning';
-        dom.connectionBadge.textContent = '❌ 通信エラー';
+        dom.badgeGas.className = 'status-tag ng';
+        dom.badgeGas.textContent = '接続エラー (NG)';
       }
     }
 
@@ -1829,17 +1749,7 @@
         btn.addEventListener('click', () => switchToTab(btn.getAttribute('data-tab')));
       });
 
-      dom.btnBannerSetup.addEventListener('click', () => switchToTab('settings-tab'));
       dom.connectionBadge.addEventListener('click', () => switchToTab('settings-tab'));
-
-      // GAS Web App URL 保存
-      dom.btnSaveGasUrl.addEventListener('click', () => {
-        const url = dom.inputGasUrl.value.trim();
-        state.gasApiUrl = url;
-        localStorage.setItem(STORAGE_KEY_GAS_URL, url);
-        showToast('GAS Web App URL を保存しました！', 'success');
-        loadSettings();
-      });
 
       // ファイル入力 & カメラ起動
       dom.btnOpenCamera.addEventListener('click', () => dom.cameraInput.click());
