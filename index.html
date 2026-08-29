@@ -8,6 +8,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Receipt Scanner - レシートスキャナー</title>
   
+  <!-- Chart.js for Pie Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     :root {
       --bg-main: #0f172a;
@@ -399,14 +402,8 @@
       gap: 12px;
     }
 
-    .form-row-3 {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-    }
-
     @media (max-width: 600px) {
-      .form-row-2, .form-row-3 {
+      .form-row-2 {
         grid-template-columns: 1fr;
       }
     }
@@ -454,6 +451,8 @@
       align-items: center;
       justify-content: space-between;
       margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     .items-title {
@@ -464,23 +463,28 @@
 
     .item-row {
       display: grid;
-      grid-template-columns: 1.5fr 70px 100px 36px;
-      gap: 8px;
+      grid-template-columns: 1.4fr 60px 100px 100px 32px;
+      gap: 6px;
       align-items: center;
       margin-bottom: 8px;
       padding: 4px 0;
     }
 
-    @media (max-width: 500px) {
+    @media (max-width: 600px) {
       .item-row {
-        grid-template-columns: 1fr 60px 85px 32px;
-        gap: 6px;
+        grid-template-columns: 1.2fr 50px 85px 85px 28px;
+        gap: 4px;
       }
     }
 
     .item-input {
-      padding: 8px 10px;
-      font-size: 0.88rem;
+      padding: 8px 8px;
+      font-size: 0.86rem;
+    }
+
+    .item-input.tax-in {
+      color: var(--accent-green);
+      font-weight: 600;
     }
 
     .btn-remove-item {
@@ -492,7 +496,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 6px;
+      padding: 4px;
       border-radius: 6px;
       transition: background 0.15s;
     }
@@ -618,6 +622,31 @@
 
     .stat-value.highlight {
       color: var(--accent-green);
+    }
+
+    /* Chart Card */
+    .chart-section {
+      background: var(--bg-card-sub);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .chart-container-box {
+      position: relative;
+      height: 290px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .history-table-container {
@@ -953,18 +982,13 @@
               </div>
             </div>
 
-            <!-- Amount Fields -->
-            <div class="form-row-3">
+            <div class="form-row-2">
               <div class="form-group">
                 <label class="form-label" for="total">
-                  <span>合計金額 (税込)</span>
-                  <button type="button" class="btn-calc-total" id="btn-calc-total" title="品目合計を反映">品目から計算</button>
+                  <span>読み取り合計金額 (税込)</span>
+                  <button type="button" class="btn-calc-total" id="btn-calc-total" title="品目合計を反映">品目から再計算</button>
                 </label>
                 <input type="number" id="total" class="form-input" style="font-size:1.1rem; font-weight:700; color:var(--accent-green);" placeholder="0" min="0" step="1">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="tax">内消費税額</label>
-                <input type="number" id="tax" class="form-input" placeholder="0" min="0" step="1">
               </div>
               <div class="form-group">
                 <label class="form-label" for="currency">通貨</label>
@@ -975,13 +999,13 @@
             <!-- Items Table Editor -->
             <div class="items-card">
               <div class="items-header">
-                <div class="items-title">🛍️ 品目明細一覧</div>
+                <div class="items-title">🛍️ 品目明細一覧 (税抜き・税込み金額)</div>
                 <button type="button" class="btn-add-item" id="btn-add-item">＋ 品目を追加</button>
               </div>
 
               <div id="items-list-container">
                 <p style="font-size:0.85rem; color:var(--text-dim); text-align:center; padding:12px 0;">
-                  品目データはありません（合計のみ保存されます）
+                  品目データはありません（合計金額が税抜/税込として保存されます）
                 </p>
               </div>
             </div>
@@ -989,9 +1013,9 @@
             <!-- OCR Raw Text (Collapsible) -->
             <div style="margin-top:14px;">
               <details>
-                <summary>📄 OCR全文テキストを表示 / 編集</summary>
+                <summary>📄 OCR全文テキストを表示 (確認用)</summary>
                 <div class="form-group" style="margin-top:8px;">
-                  <textarea id="rawText" class="form-textarea" rows="4" placeholder="レシートの印字テキスト"></textarea>
+                  <textarea id="rawText" class="form-textarea" rows="4" placeholder="レシートの印字テキスト" readonly></textarea>
                 </div>
               </details>
             </div>
@@ -1026,7 +1050,7 @@
 
         <div class="summary-cards">
           <div class="stat-card">
-            <div class="stat-label">今月の総支出額</div>
+            <div class="stat-label">今月の総支出額 (税込)</div>
             <div class="stat-value highlight" id="stat-total-spent">¥0</div>
           </div>
           <div class="stat-card">
@@ -1036,6 +1060,21 @@
           <div class="stat-card">
             <div class="stat-label">1枚あたり平均</div>
             <div class="stat-value" id="stat-avg-spent">¥0</div>
+          </div>
+        </div>
+
+        <!-- Category Pie Chart Section -->
+        <div class="chart-section">
+          <div class="chart-header">
+            <div style="font-weight:700; font-size:0.95rem; display:flex; align-items:center; gap:6px;">
+              <span>🥧</span> カテゴリ別 支出割合
+            </div>
+          </div>
+          <div class="chart-container-box">
+            <canvas id="summary-pie-chart"></canvas>
+            <div id="chart-empty-msg" style="display:none; color:var(--text-dim); font-size:0.9rem; text-align:center;">
+              グラフ表示できる支出データがありません
+            </div>
           </div>
         </div>
 
@@ -1055,14 +1094,15 @@
                   <th>店舗名</th>
                   <th>カテゴリ</th>
                   <th>品目</th>
-                  <th>金額</th>
+                  <th>税抜き金額</th>
+                  <th>税込み金額</th>
                   <th>支払方法</th>
                   <th>登録日時</th>
                 </tr>
               </thead>
               <tbody id="history-table-body">
                 <tr>
-                  <td colspan="7" style="text-align:center; color:var(--text-dim); padding:24px;">データがありません</td>
+                  <td colspan="8" style="text-align:center; color:var(--text-dim); padding:24px;">データがありません</td>
                 </tr>
               </tbody>
             </table>
@@ -1167,7 +1207,7 @@
      * Google Apps Script Web App API URL
      * デプロイしたウェブアプリのURLをここに記述します。
      */
-    const API_URL = "https://script.google.com/macros/s/AKfycbwsxsIgsH0qdtAndqF0PQ4XkC9lP1wOumrT9do7_JW1v8vIcwXGx1Z0ebCAyPZKZ_mLmA/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbxXLhf1SeuriiNjbHwAvH4GO__jNLcDQIldqOyupVAlpjOBn5zA2FMotE1-Yr1Wr4TObA/exec";
 
     // 状態管理
     const state = {
@@ -1175,7 +1215,9 @@
       currentImageDataUrl: null,
       isBusy: false,
       categories: ['食費', '日用品', '交通費', '交際費', '消耗品費', '書籍・教育', '医療費', '水道光熱費', '通信費', '趣味・娯楽', 'その他'],
-      settings: null
+      settings: null,
+      currentSummary: null,
+      chartInstance: null
     };
 
     // DOM 要素参照
@@ -1201,7 +1243,6 @@
       category: document.getElementById('category'),
       paymentMethod: document.getElementById('paymentMethod'),
       total: document.getElementById('total'),
-      tax: document.getElementById('tax'),
       currency: document.getElementById('currency'),
       rawText: document.getElementById('rawText'),
       itemsListContainer: document.getElementById('items-list-container'),
@@ -1210,12 +1251,14 @@
       btnSaveSheet: document.getElementById('btn-save-sheet'),
       btnResetForm: document.getElementById('btn-reset-form'),
 
-      // History
+      // History & Chart
       historyMonthSelect: document.getElementById('history-month-select'),
       btnRefreshHistory: document.getElementById('btn-refresh-history'),
       statTotalSpent: document.getElementById('stat-total-spent'),
       statReceiptCount: document.getElementById('stat-receipt-count'),
       statAvgSpent: document.getElementById('stat-avg-spent'),
+      summaryPieChart: document.getElementById('summary-pie-chart'),
+      chartEmptyMsg: document.getElementById('chart-empty-msg'),
       historyTableBody: document.getElementById('history-table-body'),
       btnOpenSpreadsheetLink: document.getElementById('btn-open-spreadsheet-link'),
 
@@ -1239,7 +1282,6 @@
      * GAS Backend 通信ラッパー (Fetch API & google.script.run 両対応)
      */
     async function callGas(functionName, payload = {}) {
-      // 1. GAS 内部で直接実行されている場合
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         return new Promise((resolve, reject) => {
           google.script.run
@@ -1249,7 +1291,6 @@
         });
       }
 
-      // 2. GitHub Pages 等の外部ブラウザ環境 (Fetch API)
       if (!API_URL) {
         throw new Error('index.html の API_URL 定数が未設定です。');
       }
@@ -1266,7 +1307,7 @@
         const response = await fetch(API_URL, {
           method: 'POST',
           headers: {
-            'Content-Type': 'text/plain;charset=utf-8' // GASのリダイレクト・CORS制約を回避するため text/plain を使用
+            'Content-Type': 'text/plain;charset=utf-8'
           },
           body: JSON.stringify(requestBody)
         });
@@ -1379,7 +1420,7 @@
         state.currentReceipt = receiptData;
         populateForm(receiptData);
         setBusyState(false);
-        showToast('レシートの読み取りが完了しました！内容を確認してください。', 'success');
+        showToast('レシートの読み取りが完了しました！税抜き・税込み金額を確認してください。', 'success');
       } catch (err) {
         console.error('Scan Error:', err);
         setBusyState(false);
@@ -1395,8 +1436,7 @@
 
       dom.purchasedAt.value = data.purchasedAt || new Date().toISOString().slice(0, 10);
       dom.merchant.value = data.merchant || '';
-      dom.total.value = data.total !== null && data.total !== undefined ? data.total : '';
-      dom.tax.value = data.tax !== null && data.tax !== undefined ? data.tax : '';
+      dom.total.value = data.total !== null && data.total !== undefined ? data.total : (data.amountWithTax || '');
       dom.currency.value = data.currency || 'JPY';
       dom.paymentMethod.value = data.paymentMethod || '';
       dom.rawText.value = data.rawText || '';
@@ -1413,7 +1453,7 @@
     }
 
     /**
-     * 品目明細一覧の描画
+     * 品目明細一覧の描画 (税抜き・税込み金額エディタ)
      */
     function renderItems(items) {
       dom.itemsListContainer.innerHTML = '';
@@ -1421,7 +1461,7 @@
       if (!items || items.length === 0) {
         dom.itemsListContainer.innerHTML = `
           <p style="font-size:0.85rem; color:var(--text-dim); text-align:center; padding:12px 0;">
-            品目データはありません（合計のみ保存されます）
+            品目データはありません（合計金額が税抜/税込として保存されます）
           </p>
         `;
         return;
@@ -1433,18 +1473,47 @@
         row.innerHTML = `
           <input type="text" class="form-input item-input item-name" placeholder="品目名" value="${escapeHtml(item.name || '')}">
           <input type="number" class="form-input item-input item-qty" placeholder="数量" min="1" step="1" value="${item.quantity || 1}">
-          <input type="number" class="form-input item-input item-amt" placeholder="金額" min="0" step="1" value="${item.amount !== null && item.amount !== undefined ? item.amount : ''}">
+          <input type="number" class="form-input item-input item-amt-without" placeholder="税抜金額" min="0" step="1" value="${item.amountWithoutTax !== null && item.amountWithoutTax !== undefined ? item.amountWithoutTax : ''}" title="税抜き金額">
+          <input type="number" class="form-input item-input item-amt-with tax-in" placeholder="税込金額" min="0" step="1" value="${item.amountWithTax !== null && item.amountWithTax !== undefined ? item.amountWithTax : ''}" title="税込み金額">
           <button type="button" class="btn-remove-item" title="削除">×</button>
         `;
 
         const nameInput = row.querySelector('.item-name');
         const qtyInput = row.querySelector('.item-qty');
-        const amtInput = row.querySelector('.item-amt');
+        const withoutInput = row.querySelector('.item-amt-without');
+        const withInput = row.querySelector('.item-amt-with');
         const removeBtn = row.querySelector('.btn-remove-item');
 
-        nameInput.addEventListener('input', e => { items[index].name = e.target.value; });
-        qtyInput.addEventListener('input', e => { items[index].quantity = Number(e.target.value) || 1; });
-        amtInput.addEventListener('input', e => { items[index].amount = e.target.value === '' ? null : Number(e.target.value); });
+        const taxRate = (item.category === '食費' || dom.category.value === '食費') ? 0.08 : 0.10;
+
+        nameInput.addEventListener('input', e => { item.name = e.target.value; });
+        qtyInput.addEventListener('input', e => { item.quantity = Number(e.target.value) || 1; });
+
+        // 税抜入力時 → 税込を自動計算
+        withoutInput.addEventListener('input', e => {
+          const val = e.target.value === '' ? null : Number(e.target.value);
+          item.amountWithoutTax = val;
+          if (val !== null && !isNaN(val)) {
+            item.amountWithTax = Math.round(val * (1 + taxRate));
+            withInput.value = item.amountWithTax;
+          } else {
+            item.amountWithTax = null;
+            withInput.value = '';
+          }
+        });
+
+        // 税込入力時 → 税抜を自動逆算
+        withInput.addEventListener('input', e => {
+          const val = e.target.value === '' ? null : Number(e.target.value);
+          item.amountWithTax = val;
+          if (val !== null && !isNaN(val)) {
+            item.amountWithoutTax = Math.round(val / (1 + taxRate));
+            withoutInput.value = item.amountWithoutTax;
+          } else {
+            item.amountWithoutTax = null;
+            withoutInput.value = '';
+          }
+        });
         
         removeBtn.addEventListener('click', () => {
           items.splice(index, 1);
@@ -1482,7 +1551,7 @@
     }
 
     /**
-     * 品目合計から合計金額を自動計算
+     * 品目合計から合計金額を再計算
      */
     function calcTotalFromItems() {
       if (!state.currentReceipt || !state.currentReceipt.items || state.currentReceipt.items.length === 0) {
@@ -1490,33 +1559,44 @@
         return;
       }
 
-      let sum = 0;
+      let sumWithTax = 0;
       state.currentReceipt.items.forEach(item => {
-        if (item.amount && !isNaN(item.amount)) {
-          sum += Number(item.amount);
+        if (item.amountWithTax && !isNaN(item.amountWithTax)) {
+          sumWithTax += Number(item.amountWithTax);
+        } else if (item.amountWithoutTax && !isNaN(item.amountWithoutTax)) {
+          sumWithTax += Math.round(Number(item.amountWithoutTax) * 1.10);
         }
       });
 
-      dom.total.value = sum;
-      state.currentReceipt.total = sum;
-      showToast(`品目合計 (${sum.toLocaleString()}円) を合計金額に反映しました。`, 'info');
+      dom.total.value = sumWithTax;
+      state.currentReceipt.total = sumWithTax;
+      showToast(`品目の税込合計 (${sumWithTax.toLocaleString()}円) を反映しました。`, 'info');
     }
 
     /**
      * フォームデータの収集
      */
     function collectFormData() {
-      const items = (state.currentReceipt && state.currentReceipt.items) ? state.currentReceipt.items.filter(it => it.name && it.name.trim()) : [];
+      const items = (state.currentReceipt && state.currentReceipt.items)
+        ? state.currentReceipt.items.filter(it => it.name && it.name.trim())
+        : [];
+
+      const totalVal = dom.total.value === '' ? null : Number(dom.total.value);
+      const category = dom.category.value || 'その他';
+      const taxRate = category === '食費' ? 0.08 : 0.10;
+
+      const overallAmtWithTax = totalVal;
+      const overallAmtWithoutTax = totalVal !== null ? Math.round(totalVal / (1 + taxRate)) : null;
 
       return {
         purchasedAt: dom.purchasedAt.value || null,
         merchant: dom.merchant.value.trim() || null,
-        category: dom.category.value || 'その他',
+        category: category,
         paymentMethod: dom.paymentMethod.value.trim() || null,
-        total: dom.total.value === '' ? null : Number(dom.total.value),
-        tax: dom.tax.value === '' ? null : Number(dom.tax.value),
+        total: totalVal,
+        amountWithoutTax: overallAmtWithoutTax,
+        amountWithTax: overallAmtWithTax,
         currency: dom.currency.value.trim() || 'JPY',
-        rawText: dom.rawText.value.trim() || null,
         items: items
       };
     }
@@ -1533,7 +1613,7 @@
         return;
       }
       if (receiptData.total === null && receiptData.items.length === 0) {
-        showToast('合計金額または品目を入力してください。', 'warning');
+        showToast('金額または品目を入力してください。', 'warning');
         return;
       }
 
@@ -1542,7 +1622,7 @@
         const result = await callGas('appendReceipt', receiptData);
 
         setBusyState(false);
-        showToast(`シート「${result.sheetName}」に正常に保存しました！ (${result.rowCount}行追加)`, 'success', 5000);
+        showToast(`シート「${result.sheetName}」に税抜・税込金額を保存しました！ (${result.rowCount}行追加)`, 'success', 5000);
 
         // フォームをリセットし次の撮影へ
         resetScanForm();
@@ -1565,7 +1645,7 @@
       dom.imagePreview.src = '';
       dom.itemsListContainer.innerHTML = `
         <p style="font-size:0.85rem; color:var(--text-dim); text-align:center; padding:12px 0;">
-          品目データはありません（合計のみ保存されます）
+          品目データはありません（合計金額が税抜/税込として保存されます）
         </p>
       `;
       dom.btnSaveSheet.disabled = true;
@@ -1603,6 +1683,8 @@
         ]);
 
         if (summary) {
+          state.currentSummary = summary;
+
           dom.statTotalSpent.textContent = `¥${(summary.totalSpent || 0).toLocaleString()}`;
           dom.statReceiptCount.textContent = `${summary.receiptCount || 0} 件`;
           const avg = summary.receiptCount > 0 ? Math.round(summary.totalSpent / summary.receiptCount) : 0;
@@ -1618,12 +1700,119 @@
               `<option value="${m}" ${m === summary.currentMonth ? 'selected' : ''}>${m.slice(0,4)}年${m.slice(4)}月</option>`
             ).join('');
           }
+
+          // カテゴリ別円グラフ描画
+          updateCategoryPieChart();
         }
 
         renderHistoryTable(recentList || []);
       } catch (err) {
         console.error('History Error:', err);
       }
+    }
+
+    /**
+     * カテゴリ別 円グラフ（ドーナツチャート）の描画・更新
+     */
+    function updateCategoryPieChart() {
+      if (!state.currentSummary) return;
+
+      const catColors = {
+        '食費': '#10b981',       // エメラルドグリーン
+        '日用品': '#3b82f6',     // ブルー
+        '交通費': '#f59e0b',     // アンバー
+        '交際費': '#ec4899',     // ピンク
+        '消耗品費': '#8b5cf6',   // パープル
+        '書籍・教育': '#06b6d4', // シアン
+        '医療費': '#f43f5e',     // ローズ
+        '水道光熱費': '#f97316', // オレンジ
+        '通信費': '#14b8a6',     // ティール
+        '趣味・娯楽': '#6366f1', // インディゴ
+        'その他': '#64748b'      // スレートグレー
+      };
+
+      const fallbackColors = [
+        '#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6',
+        '#06b6d4', '#f97316', '#14b8a6', '#6366f1', '#eab308',
+        '#64748b'
+      ];
+
+      const catMap = state.currentSummary.categorySummary || {};
+      
+      // 金額降順でソート
+      const sortedEntries = Object.entries(catMap)
+        .filter(([k, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1]);
+
+      const labels = sortedEntries.map(e => e[0]);
+      const dataValues = sortedEntries.map(e => e[1]);
+      const bgColors = labels.map((cat, i) => catColors[cat] || fallbackColors[i % fallbackColors.length]);
+
+      if (dataValues.length === 0 || dataValues.every(v => v === 0)) {
+        dom.summaryPieChart.style.display = 'none';
+        dom.chartEmptyMsg.style.display = 'block';
+        if (state.chartInstance) {
+          state.chartInstance.destroy();
+          state.chartInstance = null;
+        }
+        return;
+      }
+
+      dom.summaryPieChart.style.display = 'block';
+      dom.chartEmptyMsg.style.display = 'none';
+
+      const totalSum = dataValues.reduce((a, b) => a + b, 0);
+
+      if (state.chartInstance) {
+        state.chartInstance.destroy();
+      }
+
+      const ctx = dom.summaryPieChart.getContext('2d');
+      state.chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: dataValues,
+            backgroundColor: bgColors,
+            borderColor: '#1e293b',
+            borderWidth: 2,
+            hoverOffset: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                color: '#94a3b8',
+                font: { size: 12, family: 'inherit' },
+                padding: 10,
+                boxWidth: 14,
+                boxHeight: 14
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleColor: '#f8fafc',
+              bodyColor: '#93c5fd',
+              borderColor: '#334155',
+              borderWidth: 1,
+              padding: 10,
+              callbacks: {
+                label: function(context) {
+                  const val = context.raw || 0;
+                  const pct = totalSum > 0 ? ((val / totalSum) * 100).toFixed(1) : 0;
+                  return ` ¥${val.toLocaleString()} (${pct}%)`;
+                }
+              }
+            }
+          },
+          cutout: '62%'
+        }
+      });
     }
 
     /**
@@ -1634,7 +1823,7 @@
       if (!list || list.length === 0) {
         dom.historyTableBody.innerHTML = `
           <tr>
-            <td colspan="7" style="text-align:center; color:var(--text-dim); padding:24px;">登録データがありません</td>
+            <td colspan="8" style="text-align:center; color:var(--text-dim); padding:24px;">登録データがありません</td>
           </tr>
         `;
         return;
@@ -1642,14 +1831,16 @@
 
       list.forEach(row => {
         const tr = document.createElement('tr');
-        const amountDisplay = row.amount ? `¥${Number(row.amount).toLocaleString()}` : (row.total ? `(計 ¥${Number(row.total).toLocaleString()})` : '-');
+        const amtWithout = row.amountWithoutTax ? `¥${Number(row.amountWithoutTax).toLocaleString()}` : '-';
+        const amtWith = row.amountWithTax ? `¥${Number(row.amountWithTax).toLocaleString()}` : '-';
         
         tr.innerHTML = `
           <td style="white-space:nowrap; font-weight:600;">${escapeHtml(row.purchasedAt || '-')}</td>
           <td>${escapeHtml(row.merchant || '-')}</td>
           <td><span class="badge-cat">${escapeHtml(row.category || 'その他')}</span></td>
           <td>${escapeHtml(row.itemName || '-')}</td>
-          <td style="font-weight:700; color:var(--accent-green);">${amountDisplay}</td>
+          <td style="color:var(--text-muted);">${amtWithout}</td>
+          <td style="font-weight:700; color:var(--accent-green);">${amtWith}</td>
           <td>${escapeHtml(row.paymentMethod || '-')}</td>
           <td style="font-size:0.75rem; color:var(--text-dim);">${escapeHtml(row.registeredAt || '-')}</td>
         `;
@@ -1824,7 +2015,7 @@
         if (!state.currentReceipt.items) {
           state.currentReceipt.items = [];
         }
-        state.currentReceipt.items.push({ name: '', quantity: 1, amount: null });
+        state.currentReceipt.items.push({ name: '', quantity: 1, amountWithoutTax: null, amountWithTax: null });
         renderItems(state.currentReceipt.items);
       });
 
