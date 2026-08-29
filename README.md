@@ -10,13 +10,13 @@
 ## 🏗️ システム構成
 
 ```text
-[ スマートフォン / PC ブラウザ (GitHub Pages) ]
+[ スマートフォン / PC ブラウザ (GitHub Pages: index.html) ]
       │
-      │  HTTPS POST (JSON)
+      │  HTTPS POST (API_URL 定数で接続)
       ▼
 [ Google Apps Script (GAS) Web App API ]
       │
-      ├── ① Gemini Vision AI (画像OCR・項目抽出・フォールバック)
+      ├── ① Gemini Vision AI (画像OCR・構造化抽出・フォールバック)
       │
       └── ② Google スプレッドシート (月別シート自動作成 & 追記)
 ```
@@ -47,7 +47,7 @@
   - 今月の総支出額、登録件数、1枚あたり平均支出の自動集計
   - 直近の登録レシート一覧テーブル、スプレッドシートへの直接リンク
 - ⚙️ **設定 & 診断機能**:
-  - フロントエンドから GAS Web App URL の入力・保存 (`localStorage`)
+  - `index.html` 内の `API_URL` 定数で GAS バックエンドと直接通信
   - APIキー、スプレッドシート接続テスト
   - 初回シート初期化 (`setupSheets`)
 
@@ -57,10 +57,10 @@
 
 ```text
 receipt-_scanner/
-├── index.html          # フロントエンド SPA (GitHub Pages でホスティング)
+├── index.html          # フロントエンド SPA (API_URL定数でGASと通信)
 ├── Code.gs             # GAS バックエンド (AI OCR解析, スプレッドシート操作, REST API)
 ├── appsscript.json     # Apps Script マニフェスト (OAuthスコープ, WebApp設定)
-├── README.md           # セットアップ & 使い方ガイド
+├── README.md           # セットアップ & GitHub Pages 公開ガイド
 └── .gitignore          # Git 除外設定
 ```
 
@@ -86,22 +86,23 @@ receipt-_scanner/
 
 ---
 
-### ステップ 2: フロントエンド (GitHub Pages) の公開
+### ステップ 2: index.html に API_URL を設定
+`index.html` の `<script>` 先頭にある `API_URL` に、ステップ 1 で発行された URL を貼り付けます:
+
+```javascript
+const API_URL = "https://script.google.com/macros/s/あなたのデプロイID/exec";
+```
+
+---
+
+### ステップ 3: フロントエンド (GitHub Pages) の公開
 1. このリポジトリを GitHub に push します。
 2. GitHub リポジトリの **[Settings]** → **[Pages]** を開きます。
 3. **Build and deployment**:
    - Source: `Deploy from a branch`
    - Branch: `main` (または `master`), Folder: `/ (root)`
 4. **[Save]** をクリックすると、数分後に GitHub Pages の公開 URL (`https://<username>.github.io/<repo>/`) が発行されます。
-
----
-
-### ステップ 3: アプリ初期設定と利用開始
-1. 公開された GitHub Pages の URL にアクセスします。
-2. 画面上部のバナーまたは **[設定 & 診断]** タブを開きます。
-3. **[GAS Web App URL]** にステップ 1 でコピーした URL を貼り付けて **[保存]** をクリックします。
-4. **[接続テスト実行]** をクリックして、「Gemini API: 正常」「スプレッドシート: 正常」と表示されれば準備完了です！
-5. **[スキャン & 登録]** タブからレシートの撮影やアップロードをお試しください。
+5. ブラウザでアクセスすれば、そのまま即座にレシートスキャンと登録が利用できます！
 
 ---
 
