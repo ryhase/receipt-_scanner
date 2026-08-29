@@ -13,7 +13,9 @@
  *  3. Gemini / OpenAI によるマルチモーダルOCR解析 (scanReceipt)
  *  4. 自動フォールバック機構 (複数Geminiモデルの順次試行)
  *  5. スプレッドシート月別自動仕分け・保存 (appendReceipt)
+ *     - 税抜き金額・税込み金額の自動計算・分割登録
  *  6. 登録履歴・月別集計データの取得 (getRecentReceipts, getMonthlySummary)
+ *     - 品目別・カテゴリ別の内訳集計（円グラフ対応）
  *  7. スクリプトプロパティの診断・接続テスト (testConnection, setupSheets)
  * ==============================================================================
  */
@@ -27,19 +29,17 @@ const SETTINGS = {
   OPENAI_MODEL: 'OPENAI_MODEL'
 };
 
-// スプレッドシートの標準ヘッダー定義
+// スプレッドシートの標準ヘッダー定義 (OCRテキスト・合計・税額を除外し、税抜き・税込み金額を記録)
 const HEADERS = [
   '利用日',
   '店舗名',
   'カテゴリ',
   '品目',
   '数量',
-  '金額',
-  '合計',
-  '税額',
+  '税抜き金額',
+  '税込み金額',
   '通貨',
   '支払方法',
-  'OCRテキスト',
   '登録日時'
 ];
 
@@ -76,8 +76,8 @@ function doGet(e) {
     return handleGetApi_(e.parameter);
   }
 
-  // WebアプリUI (Index.html) の配信
-  return HtmlService.createTemplateFromFile('Index')
+  // WebアプリUI (index.html) の配信
+  return HtmlService.createTemplateFromFile('index')
     .evaluate()
     .setTitle('Receipt Scanner - レシートスキャナー')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
@@ -223,9 +223,9 @@ function scanWithGemini_(dataUrl, apiKey) {
 【抽出ルール】
 1. 利用日 (purchasedAt): レシートに印字されている購入日を "YYYY-MM-DD" 形式で抽出してください。和暦（例: 令和6年）の場合は西暦に変換してください。読み取れない・記載がない場合は null にしてください。
 2. 店舗名 (merchant): 発行元・店舗名・会社名を抽出してください。支店名がある場合は含めて構いません。
-3. 合計金額 (total): 最終的な支払合計金額を数値 (number) で抽出してください。推測せず、印字されている合計額を採用してください。
+3. 合計金額 (total): 最終的な支払合計金額（税込合計）を数値 (number) で抽出してください。推測せず、印字されている合計額を採用してください。
 4. 通貨 (currency): 通貨コード (JPY, USD, EUR等) を抽出してください。日本のレシートは "JPY" としてください。
-5. 税額 (tax): 消費税等の税額が明記されている場合は数値で抽出してください。内税・外税の表記から読み取れる税合計です。不明なら null。
+5. 税額 (tax): 消費税等の税額が明記されている場合は数値で抽出してください。
 6. 支払方法 (paymentMethod): 現金、クレジットカード、PayPay、交通系IC、iD、QUICPay、電子マネー等の支払手段を抽出してください。
 7. カテゴリ (category): 店舗名や品目から最も適したカテゴリを以下から1つ選択してください:
    ["食費", "日用品", "交通費", "交際費", "消耗品費", "書籍・教育", "医療費", "水道光熱費", "通信費", "趣味・娯楽", "その他"]
@@ -233,10 +233,10 @@ function scanWithGemini_(dataUrl, apiKey) {
    各品目は以下の形式:
    - name: 商品名・品目名 (string)
    - quantity: 数量 (number または null)
-   - amount: 金額・小計 (number または null)
+   - amount: レシートに印字されている金額 (number または null)
    - category: カテゴリ (string または null)
    品目が読み取れない場合は空配列 [] にしてください。
-9. OCRテキスト (rawText): レシートに印字されているすべての文字を上から順に改行区切りのテキストとして抽出してください。
+9. OCRテキスト (rawText): レシートに印字されている文字テキスト。
 
 【出力フォーマット (JSON Schema準拠)】
 以下のJSON構造のみを返してください。マークダウン等の装飾（\`\`\`json等）は付けず、純粋なJSON文字列として出力してください。
@@ -300,9 +300,10 @@ function callGeminiWithFallback_(payload, apiKey) {
 
   const modelCandidates = [
     configuredModel,
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
     'gemini-3.5-flash-lite',
+    'gemini-2.0-flash'
   ].filter(function(item, pos, self) {
     return item && self.indexOf(item) === pos;
   });
@@ -497,24 +498,28 @@ function appendReceipt(receipt) {
 
   const registeredAt = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
   
-  // 明細がある場合は品目ごと、なければ1行
+  // 明細がある場合は品目ごと、なければ合計行のみ
   const lines = safeReceipt.items && safeReceipt.items.length > 0
     ? safeReceipt.items
-    : [{ name: '', quantity: null, amount: safeReceipt.total, category: safeReceipt.category }];
+    : [{
+        name: '',
+        quantity: null,
+        amountWithoutTax: safeReceipt.amountWithoutTax,
+        amountWithTax: safeReceipt.amountWithTax || safeReceipt.total,
+        category: safeReceipt.category
+      }];
 
-  const rows = lines.map(function(item, index) {
+  const rows = lines.map(function(item) {
     return [
       safeReceipt.purchasedAt || '',
       safeText_(safeReceipt.merchant || ''),
       safeText_(item.category || safeReceipt.category || 'その他'),
       safeText_(item.name || ''),
       item.quantity === null || item.quantity === undefined ? '' : item.quantity,
-      item.amount === null || item.amount === undefined ? '' : item.amount,
-      index === 0 ? (safeReceipt.total === null ? '' : safeReceipt.total) : '',
-      index === 0 ? (safeReceipt.tax === null ? '' : safeReceipt.tax) : '',
+      item.amountWithoutTax === null || item.amountWithoutTax === undefined ? '' : item.amountWithoutTax,
+      item.amountWithTax === null || item.amountWithTax === undefined ? '' : item.amountWithTax,
       safeText_(safeReceipt.currency || 'JPY'),
       safeText_(safeReceipt.paymentMethod || ''),
-      index === 0 ? safeText_(safeReceipt.rawText || '') : '',
       registeredAt
     ];
   });
@@ -522,9 +527,9 @@ function appendReceipt(receipt) {
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, rows.length, HEADERS.length).setValues(rows);
 
-  // 金額列のフォーマット (F:金額, G:合計, H:税額)
+  // 金額列のフォーマット (F:税抜き金額, G:税込み金額)
   try {
-    sheet.getRange(startRow, 6, rows.length, 3).setNumberFormat('#,##0');
+    sheet.getRange(startRow, 6, rows.length, 2).setNumberFormat('#,##0');
   } catch (e) {
     // フォーマット適用失敗時は継続
   }
@@ -583,15 +588,18 @@ function getRecentReceipts(limit, targetSheetName) {
   const results = [];
   for (let i = values.length - 1; i >= 0; i--) {
     const row = values[i];
+    
+    const amountWithoutTax = colMap['税抜き金額'] !== undefined ? row[colMap['税抜き金額']] : '';
+    const amountWithTax = colMap['税込み金額'] !== undefined ? row[colMap['税込み金額']] : (colMap['金額'] !== undefined ? row[colMap['金額']] : (colMap['合計'] !== undefined ? row[colMap['合計']] : ''));
+
     results.push({
       purchasedAt: formatDateValue_(row[colMap['利用日']]),
       merchant: row[colMap['店舗名']] || '',
       category: row[colMap['カテゴリ']] || '',
       itemName: row[colMap['品目']] || '',
       quantity: row[colMap['数量']],
-      amount: row[colMap['金額']],
-      total: row[colMap['合計']],
-      tax: row[colMap['税額']],
+      amountWithoutTax: amountWithoutTax,
+      amountWithTax: amountWithTax,
       currency: row[colMap['通貨']] || 'JPY',
       paymentMethod: row[colMap['支払方法']] || '',
       registeredAt: formatDateValue_(row[colMap['登録日時']]),
@@ -603,7 +611,7 @@ function getRecentReceipts(limit, targetSheetName) {
 }
 
 /**
- * 月別の集計サマリーを取得
+ * 月別の集計サマリーを取得 (品目別・カテゴリ別の内訳集計を含む)
  */
 function getMonthlySummary(targetSheetName) {
   const spreadsheet = getSpreadsheet_();
@@ -623,6 +631,7 @@ function getMonthlySummary(targetSheetName) {
       totalSpent: 0,
       receiptCount: 0,
       categorySummary: {},
+      itemSummary: [],
       paymentMethodSummary: {}
     };
   }
@@ -635,6 +644,7 @@ function getMonthlySummary(targetSheetName) {
       totalSpent: 0,
       receiptCount: 0,
       categorySummary: {},
+      itemSummary: [],
       paymentMethodSummary: {}
     };
   }
@@ -649,24 +659,28 @@ function getMonthlySummary(targetSheetName) {
   let totalSpent = 0;
   const receipts = new Set();
   const categorySummary = {};
+  const itemMap = {};
   const paymentMethodSummary = {};
 
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    const totalVal = Number(row[colMap['合計']]);
-    const amountVal = Number(row[colMap['金額']]);
+    
+    // 税込み金額をベースに総支出を集計 (なければ旧金額/合計)
+    let itemAmtWithTax = colMap['税込み金額'] !== undefined ? Number(row[colMap['税込み金額']]) : NaN;
+    if (isNaN(itemAmtWithTax)) {
+      itemAmtWithTax = colMap['金額'] !== undefined ? Number(row[colMap['金額']]) : Number(row[colMap['合計']]);
+    }
+
+    if (isNaN(itemAmtWithTax) || itemAmtWithTax <= 0) continue;
+
+    const itemName = String(row[colMap['品目']] || '').trim() || String(row[colMap['店舗名']] || 'その他').trim();
     const category = String(row[colMap['カテゴリ']] || 'その他').trim();
     const payment = String(row[colMap['支払方法']] || '未指定').trim();
     const registeredAt = String(row[colMap['登録日時']] || i);
 
-    if (!isNaN(totalVal) && totalVal > 0) {
-      totalSpent += totalVal;
-    } else if (isNaN(totalVal) && !isNaN(amountVal) && amountVal > 0) {
-      totalSpent += amountVal;
-    }
-
-    const validAmount = !isNaN(amountVal) && amountVal > 0 ? amountVal : (!isNaN(totalVal) ? totalVal : 0);
-    categorySummary[category] = (categorySummary[category] || 0) + validAmount;
+    totalSpent += itemAmtWithTax;
+    categorySummary[category] = (categorySummary[category] || 0) + itemAmtWithTax;
+    itemMap[itemName] = (itemMap[itemName] || 0) + itemAmtWithTax;
 
     if (payment) {
       paymentMethodSummary[payment] = (paymentMethodSummary[payment] || 0) + 1;
@@ -675,12 +689,24 @@ function getMonthlySummary(targetSheetName) {
     receipts.add(registeredAt);
   }
 
+  // 品目別集計を金額降順でソート（上位10品目 + その他に整理）
+  const sortedItems = Object.keys(itemMap)
+    .map(function(name) { return { name: name, amount: itemMap[name] }; })
+    .sort(function(a, b) { return b.amount - a.amount; });
+
+  const topItems = sortedItems.slice(0, 10);
+  const otherItemsAmount = sortedItems.slice(10).reduce(function(sum, it) { return sum + it.amount; }, 0);
+  if (otherItemsAmount > 0) {
+    topItems.push({ name: 'その他 (' + (sortedItems.length - 10) + '品目)', amount: otherItemsAmount });
+  }
+
   return {
     currentMonth: currentSheetName,
     availableMonths: monthSheets,
     totalSpent: totalSpent,
     receiptCount: receipts.size,
     categorySummary: categorySummary,
+    itemSummary: topItems,
     paymentMethodSummary: paymentMethodSummary,
     spreadsheetUrl: spreadsheet.getUrl()
   };
@@ -700,7 +726,7 @@ function getAvailableSheets() {
 }
 
 /**
- * 初期セットアップ（シート作成・プロパティ確認）
+ * 初期セットアップ（シート作成・ヘッダー準備）
  */
 function setupSheets() {
   const spreadsheet = getSpreadsheet_();
@@ -746,7 +772,7 @@ function testConnection() {
   // Gemini テスト
   if (geminiKey) {
     try {
-      const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
       const res = UrlFetchApp.fetch(url, {
         method: 'post',
         contentType: 'application/json',
@@ -839,7 +865,7 @@ function getSettingsInfo() {
 
 /**
  * ------------------------------------------------------------------------------
- * ヘルパー・バリデーション関数
+ * ヘルパー・税額計算・バリデーション関数
  * ------------------------------------------------------------------------------
  */
 
@@ -853,6 +879,9 @@ function validateImagePayload_(payload) {
   }
 }
 
+/**
+ * レシートデータの正規化および「税抜き金額」「税込み金額」の自動計算
+ */
 function normalizeReceipt_(value) {
   value = value || {};
 
@@ -880,25 +909,71 @@ function normalizeReceipt_(value) {
     }
   }
 
-  const items = Array.isArray(value.items)
-    ? value.items.slice(0, 100).map(function(item) {
-        if (!item) return null;
-        const name = nullableText(item.name, 300);
-        return name
-          ? {
-              name: name,
-              quantity: nullableNumber(item.quantity) || 1,
-              amount: nullableNumber(item.amount),
-              category: nullableText(item.category, 50) || null
-            }
-          : null;
-      }).filter(Boolean)
-    : [];
+  const rawTotal = nullableNumber(value.total);
+  const rawItems = Array.isArray(value.items) ? value.items : [];
+
+  // 品目金額の合計を算出
+  let itemSum = 0;
+  let hasItemAmounts = false;
+  rawItems.forEach(function(item) {
+    if (item && item.amount !== null && item.amount !== undefined && !isNaN(item.amount)) {
+      itemSum += Number(item.amount);
+      hasItemAmounts = true;
+    }
+  });
+
+  // 品目合計と合計金額が等しいかどうかの判定 (端数誤差1円以内を許容)
+  const isSumEqualToTotal = hasItemAmounts && rawTotal !== null && Math.abs(itemSum - rawTotal) <= 1;
+
+  const items = rawItems.slice(0, 100).map(function(item) {
+    if (!item) return null;
+    const name = nullableText(item.name, 300);
+    if (!name) return null;
+
+    const rawAmt = nullableNumber(item.amount);
+    const category = nullableText(item.category, 50) || value.category || 'その他';
+    const taxRate = category === '食費' ? 0.08 : 0.10;
+
+    let amtWithoutTax = nullableNumber(item.amountWithoutTax);
+    let amtWithTax = nullableNumber(item.amountWithTax);
+
+    if (amtWithoutTax === null && amtWithTax === null && rawAmt !== null) {
+      if (isSumEqualToTotal) {
+        amtWithTax = rawAmt;
+        amtWithoutTax = Math.round(rawAmt / (1 + taxRate));
+      } else {
+        amtWithoutTax = rawAmt;
+        amtWithTax = Math.round(rawAmt * (1 + taxRate));
+      }
+    } else if (amtWithoutTax !== null && amtWithTax === null) {
+      amtWithTax = Math.round(amtWithoutTax * (1 + taxRate));
+    } else if (amtWithTax !== null && amtWithoutTax === null) {
+      amtWithoutTax = Math.round(amtWithTax / (1 + taxRate));
+    }
+
+    return {
+      name: name,
+      quantity: nullableNumber(item.quantity) || 1,
+      amount: rawAmt,
+      amountWithoutTax: amtWithoutTax,
+      amountWithTax: amtWithTax,
+      category: category
+    };
+  }).filter(Boolean);
+
+  let overallAmtWithoutTax = nullableNumber(value.amountWithoutTax);
+  let overallAmtWithTax = nullableNumber(value.amountWithTax);
+  if (rawTotal !== null) {
+    if (overallAmtWithTax === null) overallAmtWithTax = rawTotal;
+    if (overallAmtWithoutTax === null) overallAmtWithoutTax = Math.round(rawTotal / 1.10);
+  }
 
   return {
     purchasedAt: dateFormatted,
     merchant: nullableText(value.merchant, 200),
-    total: nullableNumber(value.total),
+    total: rawTotal,
+    amountWithoutTax: overallAmtWithoutTax,
+    amountWithTax: overallAmtWithTax,
     currency: nullableText(value.currency, 10) || 'JPY',
     tax: nullableNumber(value.tax),
     paymentMethod: nullableText(value.paymentMethod, 100),
