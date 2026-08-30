@@ -963,7 +963,7 @@
                   <span class="chip" data-cat="日用品">日用品</span>
                   <span class="chip" data-cat="交通費">交通費</span>
                   <span class="chip" data-cat="交際費">交際費</span>
-                  <span class="chip" data-cat="消耗品費">消耗品</span>
+                  <span class="chip" data-cat="外食">外食</span>
                 </div>
               </div>
 
@@ -1207,14 +1207,14 @@
      * Google Apps Script Web App API URL
      * デプロイしたウェブアプリのURLをここに記述します。
      */
-    const API_URL = "https://script.google.com/macros/s/AKfycbw7QXtKiy1_V94Fu6DnvxZxDriyrnxdEvtQCtJw1JMNP7nsjPsMDE777EHGMpEmHKnGgw/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbxBC4d1Ihzo0GEDwlb5rmfKC3egs_YO2d0Fn387v2B8GqFSirBVkjltVN-QlyMt5fJYHg/exec";
 
     // 状態管理
     const state = {
       currentReceipt: null,
       currentImageDataUrl: null,
       isBusy: false,
-      categories: ['食費', '日用品', '交通費', '交際費', '消耗品費', '書籍・教育', '医療費', '水道光熱費', '通信費', '趣味・娯楽', 'その他'],
+      categories: ['食費', '外食', '日用品', '交通費', '交際費', '消耗品費', '書籍・教育', '医療費', '水道光熱費', '通信費', '趣味・娯楽', 'その他'],
       settings: null,
       currentSummary: null,
       chartInstance: null
@@ -1719,6 +1719,7 @@
 
       const catColors = {
         '食費': '#10b981',       // エメラルドグリーン
+        '外食': '#f97316',
         '日用品': '#3b82f6',     // ブルー
         '交通費': '#f59e0b',     // アンバー
         '交際費': '#ec4899',     // ピンク
